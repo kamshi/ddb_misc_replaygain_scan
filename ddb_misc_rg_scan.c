@@ -58,7 +58,7 @@ struct rg_thread_arg
     double loudness;
 };
 
-void dummy(void* _args)
+void rg_calc_thread(void* _args)
 {
     if(!_args)
     {
@@ -318,17 +318,16 @@ int rg_scan (DB_playItem_t **scan_items,     // tracks to scan
         args[i].loudness = loudness;
 
         /* run thread */
-        rg_threads[i] = deadbeef->thread_start(&dummy, (void*)(&args[i]));
+        rg_threads[i] = deadbeef->thread_start(&rg_calc_thread, (void*)(&args[i]));
     }
 
-    struct rg_thread_arg arg;
     /* wait for threads to join */
     for(int i = 0; i < *num_tracks; ++i)
     {
         deadbeef->thread_join(rg_threads[i]);
         // update album peak if necessary
-        if (*out_album_pk < arg.out_track_pk[i]){
-            *out_album_pk = arg.out_track_pk[i];
+        if (*out_album_pk < args[i].out_track_pk[i]){
+            *out_album_pk = args[i].out_track_pk[i];
         }
     }
     /* free thread storage */
