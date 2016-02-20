@@ -35,6 +35,9 @@
 //#define trace(...) { fprintf(stderr, __VA_ARGS__); }
 #define trace(fmt,...)
 
+/* number of parallel threads */
+#define MAX_RG_THREADS 16
+
 static rg_scan_t plugin;                    // our plugin structure
 static DB_functions_t *deadbeef;            // the deadbeef functions api
 
@@ -305,6 +308,12 @@ int rg_scan (DB_playItem_t **scan_items,     // tracks to scan
 
     // calculate gain for each track
     for(int i = 0; i < *num_tracks; ++i){
+        /* limit number of parallel threads */
+        if(i >= MAX_RG_THREADS)
+        {
+            /* simple blocking mechanism: join 'oldest' thread */
+            deadbeef->thread_join(rg_threads[i - MAX_RG_THREADS]);
+        }
         /* initialize arguments */
         args[i].result = 0;
         *(int*)(&args[i].thread_id) = i;
@@ -321,15 +330,25 @@ int rg_scan (DB_playItem_t **scan_items,     // tracks to scan
         rg_threads[i] = deadbeef->thread_start(&rg_calc_thread, (void*)(&args[i]));
     }
 
-    /* wait for threads to join */
-    for(int i = 0; i < *num_tracks; ++i)
+    /* wait for remaining threads to join */
+    int remaining_thread_id = (*num_tracks) - MAX_RG_THREADS;
+    if(remaining_thread_id < 0)
+    {
+        remaining_thread_id = 0;
+    }
+    for(int i = remaining_thread_id; i < *num_tracks; ++i)
     {
         deadbeef->thread_join(rg_threads[i]);
-        // update album peak if necessary
+    }
+
+    // update album peak if necessary
+    for(int i = 0; i < *num_tracks; ++i)
+    {
         if (*out_album_pk < args[i].out_track_pk[i]){
             *out_album_pk = args[i].out_track_pk[i];
         }
     }
+
     /* free thread storage */
     if(rg_threads)
     {
